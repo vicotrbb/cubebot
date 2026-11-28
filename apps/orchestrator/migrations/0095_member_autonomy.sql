@@ -22,7 +22,8 @@ CREATE TABLE human_recovery_codes (
 -- The installation owner is an administrator only it can demote; ownership moves by transfer.
 ALTER TABLE installation ADD COLUMN owner_id uuid REFERENCES human_accounts(id);
 UPDATE installation SET owner_id = (
-    SELECT id FROM human_accounts WHERE role = 'administrator' ORDER BY created_at, id LIMIT 1
+    -- An active one: many installations suspend the bootstrap account once real ones exist.
+    SELECT id FROM human_accounts WHERE role = 'administrator' ORDER BY active DESC, created_at, id LIMIT 1
 );
 
 ALTER TABLE installation_settings
@@ -32,6 +33,12 @@ ALTER TABLE installation_settings
     ADD COLUMN members_create_connections boolean NOT NULL DEFAULT true,
     ADD COLUMN members_bring_providers boolean NOT NULL DEFAULT true,
     ADD COLUMN member_agent_limit integer DEFAULT 3 CHECK (member_agent_limit IS NULL OR member_agent_limit BETWEEN 0 AND 10000);
+-- An installation that already has people keeps what members could do before, nothing, until
+-- an administrator allows more; a new one starts with members allowed.
+UPDATE installation_settings SET members_create_agents = false, members_create_rooms = false,
+    members_create_teams = false, members_create_connections = false,
+    members_bring_providers = false
+WHERE EXISTS (SELECT 1 FROM human_accounts);
 
 ALTER TABLE invitations ADD COLUMN role text NOT NULL DEFAULT 'member'
     CHECK (role IN ('auditor', 'member', 'guest'));
@@ -51,8 +58,17 @@ CREATE TABLE password_resets (
     expires_at timestamptz NOT NULL DEFAULT clock_timestamp() + interval '1 day',
     used_at timestamptz
 );
+-- A link works only while its maker could still make it: an active administrator, and the owner
+-- if the account it resets has since become an administrator.
+CREATE FUNCTION reset_still_authorized(account uuid, maker uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+    SELECT EXISTS(SELECT 1 FROM human_accounts WHERE id = $2 AND active AND role = 'administrator')
+       AND ((SELECT role <> 'administrator' FROM human_accounts WHERE id = $1)
+            OR $2 = (SELECT owner_id FROM installation WHERE singleton))
+$$;
 
--- Owners hold every capability on what they own, and auditors read everything, as grants the
+-- Owners hold every capability on what they own while they may own things (a guest or auditor
+-- holds none on what it once created), and auditors read everything, as grants the
 -- view derives; grant rows stay the explicit shares. `source` says where each row comes from.
 CREATE OR REPLACE VIEW effective_human_grants AS
 SELECT a.id AS actor_id, g.id, g.scope_kind, g.scope_id, g.capability, g.team_id, 'grant'::text AS source
@@ -75,13 +91,13 @@ CROSS JOIN (VALUES
     ('agent', 'browser.control'), ('conversation', 'conversation.read'),
     ('conversation', 'conversation.send')
 ) c(kind, capability)
-WHERE a.active AND a.role <> 'guest'
+WHERE a.active AND a.role IN ('administrator', 'member')
 UNION ALL
 SELECT a.id, NULL::uuid, 'room', r.id, c.capability, NULL::uuid, 'owner'
 FROM human_accounts a
 JOIN rooms r ON r.created_by = a.id AND NOT r.task
 CROSS JOIN (VALUES ('conversation.read'), ('conversation.send'), ('room.manage')) c(capability)
-WHERE a.active AND a.role <> 'guest'
+WHERE a.active AND a.role IN ('administrator', 'member')
 UNION ALL
 SELECT a.id, NULL::uuid, c.kind, g.id, c.capability, NULL::uuid, 'auditor'
 FROM human_accounts a

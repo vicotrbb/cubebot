@@ -8,3 +8,12 @@ CREATE TABLE personal_providers (
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     PRIMARY KEY (owner, provider)
 );
+
+-- The keys that may serve right now: their owner is active, an administrator, or a member while
+-- members may bring their own.
+CREATE VIEW usable_personal_providers AS
+SELECT p.*
+FROM personal_providers p
+JOIN human_accounts h ON h.id = p.owner AND h.active
+WHERE h.role = 'administrator'
+   OR (h.role = 'member' AND (SELECT members_bring_providers FROM installation_settings WHERE singleton));

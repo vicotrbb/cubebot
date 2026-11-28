@@ -297,7 +297,7 @@ async fn choosable(
             UNION ALL
             SELECT provider, 1 FROM provider_saved WHERE provider NOT IN (SELECT provider FROM provider_connection)
             UNION ALL
-            SELECT p.provider, 2 FROM personal_providers p JOIN agents g ON g.created_by = p.owner AND g.id = $1
+            SELECT p.provider, 2 FROM usable_personal_providers p JOIN agents g ON g.created_by = p.owner AND g.id = $1
             WHERE p.provider NOT IN (SELECT provider FROM provider_connection UNION SELECT provider FROM provider_saved)
         ) providers
         ORDER BY position, provider

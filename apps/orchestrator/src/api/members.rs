@@ -246,8 +246,9 @@ async fn create_token(
     headers: HeaderMap,
     Json(input): Json<NewToken>,
 ) -> Result<impl IntoResponse, IdentityError> {
-    let actor = actor(&identity, &headers).await?;
-    let token = identity.create_token(&actor, &input).await?;
+    let caller = super::browser::credential(&identity, &headers)?;
+    let actor = identity.authenticate(caller).await?;
+    let token = identity.create_token(&actor, &input, caller).await?;
     Ok((StatusCode::CREATED, no_store(Secret { token })))
 }
 

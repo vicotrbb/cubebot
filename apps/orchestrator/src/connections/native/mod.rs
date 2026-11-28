@@ -485,9 +485,11 @@ impl Connections {
         else {
             return Err(ConnectError::Invalid("this sign-in does not link".into()));
         };
-        // Someone else's personal connection is not theirs to borrow.
+        // A personal connection links only to its owner's own personal ones; only administrators
+        // link to the installation's, so nobody borrows a token they could not use.
         let row = sqlx::query!(
-            "SELECT connector, auth, config FROM connections WHERE id = $1 AND (NOT personal OR created_by = $2)",
+            "SELECT connector, auth, config FROM connections WHERE id = $1 AND CASE WHEN personal THEN created_by = $2
+                ELSE EXISTS(SELECT 1 FROM human_accounts WHERE id = $2 AND active AND role = 'administrator') END",
             linked,
             actor,
         )

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE human_sessions SET oidc_policy_revision = NULL WHERE token_hash = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fc719ed1337177c3e88cf4c5280b280552ab0d87cd865252ae04d07485bc91ab"
+}

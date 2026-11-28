@@ -465,34 +465,11 @@ impl Identity {
         }
         may_own(&mut transaction, input.to).await?;
         let administrator = actor.role == Role::Administrator;
-        let moved = match input.kind {
-            Owned::Agent => sqlx::query_scalar!(
-                "UPDATE agents SET created_by = $3 WHERE id = $1 AND desired_state <> 'retired' AND (created_by = $2 OR $4) RETURNING id",
-                input.id, actor.id, input.to, administrator,
-            )
-            .fetch_optional(&mut *transaction)
-            .await?,
-            Owned::Room => sqlx::query_scalar!(
-                "UPDATE rooms SET created_by = $3 WHERE id = $1 AND NOT task AND (created_by = $2 OR $4) RETURNING id",
-                input.id, actor.id, input.to, administrator,
-            )
-            .fetch_optional(&mut *transaction)
-            .await?,
-            Owned::Team => {
-                let room = sqlx::query_scalar!(
-                    "UPDATE teams SET created_by = $3 WHERE id = $1 AND deleted_at IS NULL AND (created_by = $2 OR $4) RETURNING room_id",
-                    input.id, actor.id, input.to, administrator,
-                )
-                .fetch_optional(&mut *transaction)
-                .await?;
-                if let Some(room) = room {
-                    sqlx::query!("UPDATE rooms SET created_by = $2 WHERE id = $1", room, input.to)
-                        .execute(&mut *transaction)
-                        .await?;
-                }
-                room.map(|_| input.id)
-            }
-        };
+        if !administrator && matches!(input.kind, Owned::Agent) {
+            // Handing agents to another member must not get round the member agent limit.
+            may_create(&mut *transaction, input.to, Creation::Agent).await?;
+        }
+        let moved = move_owned(&mut transaction, actor.id, input, administrator).await?;
         let id = moved.ok_or(IdentityError::NotFound)?;
         command
             .commit(transaction, Receipt { id, revision: 1 })
@@ -576,6 +553,55 @@ impl Identity {
             .commit(transaction, Receipt { id, revision: 1 })
             .await
     }
+}
+
+/// Rewrites the owner of one agent, room or team (a team's room moves with it); `None` when it
+/// is not there or the actor may not move it.
+async fn move_owned(
+    transaction: &mut Transaction<'_, Postgres>,
+    actor: Uuid,
+    input: &Transfer,
+    administrator: bool,
+) -> Result<Option<Uuid>, IdentityError> {
+    Ok(match input.kind {
+        Owned::Agent => sqlx::query_scalar!(
+            "UPDATE agents SET created_by = $3 WHERE id = $1 AND desired_state <> 'retired' AND (created_by = $2 OR $4) RETURNING id",
+            input.id, actor, input.to, administrator,
+        )
+        .fetch_optional(&mut **transaction)
+        .await?,
+        Owned::Room => sqlx::query_scalar!(
+            "UPDATE rooms SET created_by = $3 WHERE id = $1 AND NOT task AND (created_by = $2 OR $4) RETURNING id",
+            input.id, actor, input.to, administrator,
+        )
+        .fetch_optional(&mut **transaction)
+        .await?,
+        Owned::Team => move_team(transaction, actor, input, administrator).await?,
+    })
+}
+
+async fn move_team(
+    transaction: &mut Transaction<'_, Postgres>,
+    actor: Uuid,
+    input: &Transfer,
+    administrator: bool,
+) -> Result<Option<Uuid>, IdentityError> {
+    let room = sqlx::query_scalar!(
+            "UPDATE teams SET created_by = $3 WHERE id = $1 AND deleted_at IS NULL AND (created_by = $2 OR $4) RETURNING room_id",
+            input.id, actor, input.to, administrator,
+        )
+        .fetch_optional(&mut **transaction)
+        .await?;
+    if let Some(room) = room {
+        sqlx::query!(
+            "UPDATE rooms SET created_by = $2 WHERE id = $1",
+            room,
+            input.to
+        )
+        .execute(&mut **transaction)
+        .await?;
+    }
+    Ok(room.map(|_| input.id))
 }
 
 pub(super) struct Subject {

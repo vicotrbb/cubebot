@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT a.login FROM password_resets r JOIN human_accounts a ON a.id = r.account_id AND a.active\n            WHERE r.token_hash = $1 AND r.used_at IS NULL AND r.expires_at > clock_timestamp()\n              AND reset_still_authorized(r.account_id, r.created_by)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "login",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "955035c6f5a3c88ac275104abf8593c414fd577370f505447f0942e36baf2d5c"
+}

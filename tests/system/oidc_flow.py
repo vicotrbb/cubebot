@@ -199,6 +199,16 @@ def exercise(environment, issuer, directory):
         assert browser.request("/api/identity/me")[0] == 401
         browser = check_domain_admission(base, issuer, password)
         assert browser.request("/api/identity/me")[0] == 200
+    group_config = domain_config | {
+        "admit_email_domains": [],
+        "groups_claim": "groups",
+        "admit_groups": ["cubebot-users"],
+    }
+    config.write_text(json.dumps(group_config))
+    with running([str(BINARY)], ROOT, env) as process:
+        await_ready(process, base + "/api/health/ready")
+        check_group_admission(base, issuer, password)
+    config.write_text(json.dumps(domain_config))
     del env["CUBEBOT_OIDC_CONFIG"]
     with running([str(BINARY)], ROOT, env) as process:
         await_ready(process, base + "/api/health/ready")
@@ -322,6 +332,55 @@ def check_domain_admission(base, issuer, password):
     return browser
 
 
+def check_group_admission(base, issuer, password):
+    """The groups claim admits people and keeps a group's members and role current."""
+    admin = operator(base, password)
+    created = {
+        "request_id": str(uuid.uuid4()),
+        "name": "Operations",
+        "source": "oidc",
+        "external_id": "ops",
+    }
+    status, _, group = admin.request("/api/identity/groups", created)
+    assert status == 201, group
+    role = {
+        "request_id": str(uuid.uuid4()),
+        "group": group["id"],
+        "role": "auditor",
+        "expected_revision": group["revision"],
+    }
+    assert admin.request("/api/identity/groups/role", role)[0] == 200
+    issuer.subject = "outside-group"
+    issuer.email = "outsider@elsewhere.example"
+    issuer.overrides = {"groups": ["someone-else"]}
+    denied = Browser(base)
+    assert denied.request(denied.begin())[0] == 403
+    issuer.subject = "group-member"
+    issuer.overrides = {"groups": ["cubebot-users", "ops"]}
+    person = Browser(base)
+    account = person.sign_in()
+
+    def standing():
+        return person.request("/api/identity/me/standing")[2]["role"]
+
+    def members():
+        listed = admin.request("/api/identity/groups")[2]
+        return next(g for g in listed if g["id"] == group["id"])["members"]
+
+    assert standing() == "auditor"
+    assert members() == [account["id"]]
+    # A token without the claim leaves memberships as they were.
+    issuer.overrides = {}
+    assert person.sign_in()["id"] == account["id"]
+    assert standing() == "auditor" and members() == [account["id"]]
+    issuer.overrides = {"groups": ["cubebot-users"]}
+    assert person.sign_in()["id"] == account["id"]
+    assert standing() == "member" and members() == []
+    issuer.overrides = {}
+    issuer.subject = "employee-1"
+    issuer.email = "employee@example.com"
+
+
 def check_oidc_suspension(base, issuer, password, member):
     operator = Browser(base)
     assert (
@@ -353,6 +412,7 @@ def check_oidc(environment):
         issuer.close()
     print(
         "OIDC workflow passed: signed tokens, PKCE, browser binding, replay, "
-        "rotation, admission, linking, revocation, CSRF, restart, policy invalidation, "
+        "rotation, admission, group admission and roles, linking, revocation, CSRF, "
+        "restart, policy invalidation, "
         "console setup"
     )

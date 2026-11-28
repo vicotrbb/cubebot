@@ -470,15 +470,47 @@ async fn people_manage_their_password_sessions_and_tokens() {
                 name: "CI".into(),
                 days: 30,
             },
+            &kept.token,
         )
         .await
         .unwrap();
     assert_eq!(identity.authenticate(&token).await.unwrap().id, ada.id);
+    // A token made from a single sign-on session ends with that sign-on policy.
+    let digest = |token: &str| {
+        use sha2::Digest;
+        sha2::Sha256::digest(token.as_bytes()).to_vec()
+    };
+    sqlx::query!(
+        "UPDATE human_sessions SET oidc_policy_revision = 42 WHERE token_hash = $1",
+        digest(&other.token)
+    )
+    .execute(&people.pool)
+    .await
+    .unwrap();
+    let bound = identity
+        .create_token(
+            &ada,
+            &NewToken {
+                name: "SSO".into(),
+                days: 1,
+            },
+            &other.token,
+        )
+        .await
+        .unwrap();
+    assert!(identity.authenticate(&bound).await.is_err());
+    sqlx::query!(
+        "UPDATE human_sessions SET oidc_policy_revision = NULL WHERE token_hash = $1",
+        digest(&other.token)
+    )
+    .execute(&people.pool)
+    .await
+    .unwrap();
     let sessions = identity.sessions(&ada, &kept.token).await.unwrap();
     assert_eq!(sessions.iter().filter(|session| session.current).count(), 1);
     let named = sessions
         .iter()
-        .find(|session| session.name.is_some())
+        .find(|session| session.name.as_deref() == Some("CI"))
         .unwrap();
     identity.end_session(&ada, named.id).await.unwrap();
     assert!(identity.authenticate(&token).await.is_err());
@@ -518,4 +550,159 @@ async fn people_manage_their_password_sessions_and_tokens() {
             .is_err()
     );
     identity.login("ada", "reset long password").await.unwrap();
+}
+
+async fn revision(pool: &sqlx::PgPool, id: Uuid) -> i64 {
+    sqlx::query_scalar!("SELECT revision FROM human_accounts WHERE id = $1", id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn set_role(people: &People, id: Uuid, role: Role) {
+    let expected_revision = revision(&people.pool, id).await;
+    people
+        .identity
+        .change_role(
+            &people.owner,
+            &ChangeRole {
+                request_id: Uuid::new_v4(),
+                id,
+                role,
+                expected_revision,
+            },
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn auditors_and_guests_hold_nothing_on_what_they_once_created() {
+    let people = People::new().await;
+    let (identity, agents) = (&people.identity, Agents::new(people.pool.clone()));
+    let ada = people.add("ada", Role::Member).await;
+    let gus = people.add("gus", Role::Member).await;
+    let hers = agents.create(&ada, &agent("Hers")).await.unwrap();
+    let his = agents.create(&gus, &agent("His")).await.unwrap();
+    set_role(&people, ada.id, Role::Auditor).await;
+    set_role(&people, gus.id, Role::Guest).await;
+    let ada = sign_in(identity, "ada").await;
+    let gus = sign_in(identity, "gus").await;
+    let scope = Scope::Agent { id: hers.id };
+    assert!(!allowed(identity, &ada, scope, Capability::AgentManage).await);
+    assert!(!allowed(identity, &ada, scope, Capability::MemoryEdit).await);
+    assert!(allowed(identity, &ada, scope, Capability::MemoryRead).await);
+    let chat = Scope::Conversation { id: his.id };
+    assert!(!allowed(identity, &gus, chat, Capability::ConversationRead).await);
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn the_agent_limit_holds_across_transfers_and_retries() {
+    let people = People::new().await;
+    let (identity, agents) = (&people.identity, Agents::new(people.pool.clone()));
+    identity
+        .save_policy(&people.owner, &policy(true, Some(1)))
+        .await
+        .unwrap();
+    let ada = people.add("ada", Role::Member).await;
+    let bob = people.add("bob", Role::Member).await;
+    let command = agent("Only");
+    let first = agents.create(&ada, &command).await.unwrap();
+    // A retry after the limit is reached still gets its receipt.
+    assert_eq!(agents.create(&ada, &command).await.unwrap().id, first.id);
+    agents.create(&bob, &agent("Bob's")).await.unwrap();
+    let hand = Transfer {
+        request_id: Uuid::new_v4(),
+        kind: Owned::Agent,
+        id: first.id,
+        to: bob.id,
+    };
+    assert!(matches!(
+        identity.transfer(&ada, &hand).await,
+        Err(IdentityError::Forbidden)
+    ));
+    // Administrators move agents regardless, such as when someone leaves.
+    identity.transfer(&people.owner, &hand).await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn reset_links_lapse_with_their_makers_authority() {
+    let people = People::new().await;
+    let identity = &people.identity;
+    let admin = people.add("adm", Role::Administrator).await;
+    let ada = people.add("ada", Role::Member).await;
+    let bob = people.add("bob", Role::Member).await;
+    let link = |actor: &Actor, id: Uuid| {
+        let identity = identity.clone();
+        let actor = Actor {
+            id: actor.id,
+            administrator: actor.administrator,
+            role: actor.role,
+        };
+        async move {
+            identity
+                .create_password_reset(
+                    &actor,
+                    &AccountRequest {
+                        request_id: Uuid::new_v4(),
+                        id,
+                    },
+                )
+                .await
+                .unwrap()
+        }
+    };
+    let for_ada = link(&admin, ada.id).await;
+    let for_bob = link(&admin, bob.id).await;
+    // Ada became an administrator: only the owner's links reset administrators.
+    set_role(&people, ada.id, Role::Administrator).await;
+    assert!(matches!(
+        identity
+            .redeem_password_reset(&for_ada, "a brand new password")
+            .await,
+        Err(IdentityError::Unauthorized)
+    ));
+    // Its maker was suspended.
+    identity
+        .suspend(
+            &people.owner,
+            admin.id,
+            revision(&people.pool, admin.id).await,
+            Uuid::new_v4(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        identity
+            .redeem_password_reset(&for_bob, "a brand new password")
+            .await,
+        Err(IdentityError::Unauthorized)
+    ));
+    let owners = link(&people.owner, ada.id).await;
+    identity
+        .redeem_password_reset(&owners, "a brand new password")
+        .await
+        .unwrap();
+    identity.login("ada", "a brand new password").await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn guessing_two_factor_codes_spends_the_sign_in_budget() {
+    let people = People::new().await;
+    let identity = &people.identity;
+    let ada = people.add("ada", Role::Member).await;
+    identity.enroll_two_factor(&ada).await.unwrap();
+    let mut refused = 0;
+    for _ in 0..12 {
+        match identity.confirm_two_factor(&ada, "000000").await {
+            Err(IdentityError::InvalidInput) => {}
+            Err(IdentityError::Unauthorized) => refused += 1,
+            other => panic!("unexpected {:?}", other.map(|_| ())),
+        }
+    }
+    assert!(refused >= 2, "attempts past the budget are refused");
 }

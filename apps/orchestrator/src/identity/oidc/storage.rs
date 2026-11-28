@@ -216,8 +216,8 @@ pub(super) async fn admit(
     )
     .execute(&mut *transaction)
     .await?;
-    if config.groups_claim.is_some() {
-        crate::identity::groups::sync_claimed(&mut transaction, account, &verified.groups).await?;
+    if let (Some(_), Some(groups)) = (&config.groups_claim, &verified.groups) {
+        crate::identity::groups::sync_claimed(&mut transaction, account, groups).await?;
     }
     let token = passwords::token();
     sqlx::query!(
@@ -308,7 +308,7 @@ async fn new_binding_account(
         &verified.subject,
         verified.email.as_deref(),
         verified.email_verified,
-        &verified.groups,
+        verified.groups.as_deref().unwrap_or_default(),
     ) {
         return Err(IdentityError::Forbidden);
     }

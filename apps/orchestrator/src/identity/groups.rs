@@ -267,6 +267,15 @@ impl Identity {
         if let Some(receipt) = receipt {
             return Ok(receipt);
         }
+        let administrators = sqlx::query_scalar!(
+            r#"SELECT role IS NOT DISTINCT FROM 'administrator' AS "administrators!" FROM human_teams WHERE id = $1 AND active"#,
+            input.group.0,
+        )
+        .fetch_optional(&mut *transaction)
+        .await?;
+        if administrators == Some(true) && !members::is_owner(&mut transaction, actor.id).await? {
+            return Err(IdentityError::Forbidden);
+        }
         let revision = sqlx::query_scalar!(
             r#"
             UPDATE human_teams
@@ -373,7 +382,11 @@ async fn may_change_members(
         return Err(IdentityError::Conflict);
     }
     let allowed = match actor.role {
-        Role::Administrator => true,
+        // Who is in an administrators' group decides who is an administrator: the owner's call.
+        Role::Administrator => {
+            group.role.as_deref() != Some("administrator")
+                || members::is_owner(transaction, actor.id).await?
+        }
         Role::Member => group.manages && group.role.is_none() && input.manager.is_none(),
         Role::Auditor | Role::Guest => false,
     };
@@ -399,7 +412,8 @@ async fn actor_active_admin(
 
 /// Sets these accounts' roles from the role-carrying groups they are in. An account in none
 /// keeps its own role, or returns to member if a group gave it the one it has. The installation
-/// owner's role never changes.
+/// owner's role never changes, nor does an administrator's the owner made directly: only the
+/// owner unmakes administrators.
 pub(crate) async fn apply_roles(
     transaction: &mut Transaction<'_, Postgres>,
     accounts: &[Uuid],
@@ -413,6 +427,7 @@ pub(crate) async fn apply_roles(
                  ORDER BY array_position(ARRAY['administrator','auditor','member','guest'], t.role) LIMIT 1) AS role
             FROM human_accounts a
             WHERE a.id = ANY($1) AND a.id IS DISTINCT FROM (SELECT owner_id FROM installation WHERE singleton)
+              AND (a.role <> 'administrator' OR a.role_from_group)
         )
         UPDATE human_accounts a
         SET role = COALESCE(mapped.role, 'member'), role_from_group = mapped.role IS NOT NULL,

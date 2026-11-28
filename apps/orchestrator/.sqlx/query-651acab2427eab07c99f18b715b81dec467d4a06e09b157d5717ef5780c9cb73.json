@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE password_resets SET used_at = clock_timestamp() WHERE token_hash = $1 AND used_at IS NULL AND expires_at > clock_timestamp() AND reset_still_authorized(account_id, created_by) RETURNING account_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "651acab2427eab07c99f18b715b81dec467d4a06e09b157d5717ef5780c9cb73"
+}

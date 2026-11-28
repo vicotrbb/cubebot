@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT connector, auth, config FROM connections WHERE id = $1 AND (NOT personal OR created_by = $2)",
+  "query": "SELECT connector, auth, config FROM connections WHERE id = $1 AND CASE WHEN personal THEN created_by = $2\n                ELSE EXISTS(SELECT 1 FROM human_accounts WHERE id = $2 AND active AND role = 'administrator') END",
   "describe": {
     "columns": [
       {
@@ -31,5 +31,5 @@
       false
     ]
   },
-  "hash": "9d1ecc324831297877010441026486c16bfcbc33617dba17d2e9f7b50a6764dd"
+  "hash": "99f0aa6fa7d511deab8b6214f37c3e928e669a62cced425d171749690f9b37c7"
 }

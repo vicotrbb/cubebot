@@ -408,3 +408,225 @@ async fn owners_bring_their_own_provider_keys() {
             .is_empty()
     );
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn only_the_owner_moves_administrators_through_groups() {
+    let (identity, pool, owner) = setup().await;
+    let admin = add(&identity, &owner, "adm", Role::Administrator).await;
+    let other = add(&identity, &owner, "oth", Role::Administrator).await;
+    let ada = add(&identity, &owner, "ada", Role::Member).await;
+    let admins = group(&identity, &owner, "Admins", None).await;
+    let mapped = identity
+        .set_group_role(
+            &owner,
+            &GroupRole {
+                request_id: Uuid::new_v4(),
+                group: admins,
+                role: Some(Role::Administrator),
+                expected_revision: 1,
+            },
+        )
+        .await
+        .unwrap();
+    // A non-owner administrator neither adds to nor removes the administrators' group.
+    assert!(matches!(
+        identity
+            .change_membership(&admin, &change(admins, ada.id, mapped.revision, true, None))
+            .await,
+        Err(IdentityError::Forbidden)
+    ));
+    assert!(matches!(
+        identity
+            .delete_group(
+                &admin,
+                &cubebot_orchestrator::identity::groups::DeleteGroup {
+                    request_id: Uuid::new_v4(),
+                    group: admins,
+                    expected_revision: mapped.revision,
+                },
+            )
+            .await,
+        Err(IdentityError::Forbidden)
+    ));
+    assert_eq!(role_of(&pool, ada.id).await, "member");
+    // Nor demotes an administrator by putting them in a guests' group.
+    let guests = group(&identity, &admin, "Visitors", None).await;
+    let joined = identity
+        .change_membership(&admin, &change(guests, other.id, 1, true, None))
+        .await
+        .unwrap();
+    identity
+        .set_group_role(
+            &admin,
+            &GroupRole {
+                request_id: Uuid::new_v4(),
+                group: guests,
+                role: Some(Role::Guest),
+                expected_revision: joined.revision,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(role_of(&pool, other.id).await, "administrator");
+    // The owner still does.
+    identity
+        .change_membership(&owner, &change(admins, ada.id, mapped.revision, true, None))
+        .await
+        .unwrap();
+    assert_eq!(role_of(&pool, ada.id).await, "administrator");
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn connections_and_keys_stay_with_those_who_may_use_them() {
+    let (identity, pool, owner) = setup().await;
+    let ada = add(&identity, &owner, "ada", Role::Member).await;
+    let agents = Agents::new(pool.clone());
+    let hers = AgentId(agents.create(&ada, &agent("Hers")).await.unwrap().id);
+    let also = AgentId(agents.create(&ada, &agent("Also hers")).await.unwrap().id);
+    let router = Router::new().route(
+        "/feed.xml",
+        axum::routing::get(|| async {
+            (
+                [("content-type", "application/rss+xml")],
+                r#"<?xml version="1.0"?><rss version="2.0"><channel><title>N</title></channel></rss>"#,
+            )
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let feed = format!("http://{}/feed.xml", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let credentials = Credentials::new([7; 32]);
+    let connections = Connections::new(pool.clone(), credentials.clone());
+    let rss = |slug: &str, access: serde_json::Value| {
+        serde_json::from_value(json!({"connector": "rss", "slug": slug, "auth": "public",
+            "config": {"feeds": [feed]}, "secrets": {}, "access": access}))
+        .unwrap()
+    };
+    let company = connections
+        .create_connection(owner.id, rss("company", json!({"mode": "all_agents"})))
+        .await
+        .unwrap();
+    let mine = connections
+        .create_connection(
+            ada.id,
+            rss(
+                "mine",
+                json!({"mode": "explicit_grants", "agents": [hers.0]}),
+            ),
+        )
+        .await
+        .unwrap();
+    // A member links only to their own personal connections, never the installation's.
+    let link = |linked: Uuid| {
+        let slug = if linked == company.id {
+            "borrowed"
+        } else {
+            "own"
+        };
+        serde_json::from_value(json!({"connector": "email", "slug": slug,
+            "auth": "linked", "linked": linked, "config": {"provider": "gmail", "address": "ada@example.com"}, "secrets": {}}))
+        .unwrap()
+    };
+    let borrowed = connections
+        .create_connection(ada.id, link(company.id))
+        .await;
+    assert!(
+        matches!(&borrowed, Err(error) if format!("{error:?}").contains("no longer exists")),
+        "{:?}",
+        borrowed.as_ref().map(|c| c.id)
+    );
+    let own = connections.create_connection(ada.id, link(mine.id)).await;
+    assert!(
+        matches!(&own, Err(error) if format!("{error:?}").contains("switched on")),
+        "{:?}",
+        own.as_ref().map(|c| c.id)
+    );
+
+    let console = cubebot_orchestrator::api::configured_router_with_credentials(
+        pool.clone(),
+        None,
+        None,
+        Some(credentials),
+    )
+    .await
+    .unwrap();
+    let (origin, _task) = crate::runtime_identity::http_server(console).await;
+    let as_person = |login: &str| {
+        let identity = identity.clone();
+        let origin = origin.clone();
+        let login = login.to_owned();
+        async move {
+            crate::connections::Console {
+                http: openidconnect::reqwest::Client::new(),
+                origin,
+                token: identity.login(&login, PASSWORD).await.unwrap().token,
+            }
+        }
+    };
+    let (member, admin) = (as_person("ada").await, as_person("owner").await);
+    // Signing in the company connection again would put the member's account behind it.
+    let (status, _) = member
+        .json(
+            "POST",
+            "/api/connections/sign-ins",
+            Some(
+                json!({"connector": "google", "slug": "company", "auth": "oauth2",
+                "config": {}, "connection": company.id}),
+            ),
+        )
+        .await;
+    assert_eq!(status, 404);
+    // The administrator gets past that check to the sign-in itself.
+    let (status, _) = admin
+        .json(
+            "POST",
+            "/api/connections/sign-ins",
+            Some(
+                json!({"connector": "google", "slug": "company", "auth": "oauth2",
+                "config": {}, "connection": company.id}),
+            ),
+        )
+        .await;
+    assert_ne!(status, 404);
+    // Only the owner hands their personal connection to more agents; others only withdraw it.
+    let path = format!("/api/connections/{}", mine.id);
+    let both = json!({"access": {"mode": "explicit_grants", "agents": [hers.0, also.0]}});
+    assert_eq!(admin.json("PUT", &path, Some(both.clone())).await.0, 403);
+    assert_eq!(member.json("PUT", &path, Some(both)).await.0, 200);
+    let none = json!({"access": {"mode": "explicit_grants", "agents": []}});
+    assert_eq!(admin.json("PUT", &path, Some(none)).await.0, 200);
+
+    // A personal key serves while its owner may bring one.
+    let key = SavePersonalProvider {
+        api_key: "sk-ada".into(),
+        context_window: None,
+    };
+    connections
+        .save_personal_provider(ada.id, ProviderKind::Anthropic, &key)
+        .await
+        .unwrap();
+    let providers = |agent: AgentId| {
+        let connections = connections.clone();
+        async move { connections.agent_model(agent).await.unwrap().providers }
+    };
+    assert_eq!(providers(hers).await, vec![ProviderKind::Anthropic]);
+    sqlx::query!("UPDATE installation_settings SET members_bring_providers = false")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(providers(hers).await.is_empty());
+    sqlx::query!("UPDATE installation_settings SET members_bring_providers = true")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query!(
+        "UPDATE human_accounts SET role = 'guest' WHERE id = $1",
+        ada.id
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(providers(hers).await.is_empty());
+}

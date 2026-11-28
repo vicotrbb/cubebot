@@ -109,7 +109,7 @@ impl Connections {
         Ok(())
     }
 
-    /// The agent's owner's key for `provider`, while that owner is active.
+    /// The agent's owner's key for `provider`, while it may serve (`usable_personal_providers`).
     pub(super) async fn owner_key(
         &self,
         tx: &mut Transaction<'_, Postgres>,
@@ -118,10 +118,9 @@ impl Connections {
     ) -> Result<Option<(String, Option<i64>)>, IdentityError> {
         let row = sqlx::query!(
             r#"
-            SELECT p.owner, p.credential, p.context_window
+            SELECT p.owner AS "owner!", p.credential AS "credential!", p.context_window
             FROM agents g
-            JOIN human_accounts h ON h.id = g.created_by AND h.active
-            JOIN personal_providers p ON p.owner = g.created_by AND p.provider = $2
+            JOIN usable_personal_providers p ON p.owner = g.created_by AND p.provider = $2
             WHERE g.id = $1
             "#,
             agent.0,

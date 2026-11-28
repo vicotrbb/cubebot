@@ -203,6 +203,8 @@ impl Identity {
         actor: &Actor,
         code: &str,
     ) -> Result<Vec<String>, IdentityError> {
+        // Codes are guessable; each try spends from the same budget as a password.
+        self.reserve_password_check(actor.id).await?;
         let mut transaction = self.pool.begin().await?;
         let sealed = sqlx::query_scalar!(
             r#"SELECT totp_secret AS "secret!" FROM human_accounts WHERE id = $1 AND active AND totp_enabled_at IS NULL AND totp_secret IS NOT NULL FOR UPDATE"#,
@@ -232,6 +234,7 @@ impl Identity {
     /// Turns two-factor off; a current code or a recovery code proves it is the owner.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn disable_two_factor(&self, actor: &Actor, code: &str) -> Result<(), IdentityError> {
+        self.reserve_password_check(actor.id).await?;
         let mut transaction = self.pool.begin().await?;
         sqlx::query_scalar!(
             "SELECT id FROM human_accounts WHERE id = $1 AND active FOR UPDATE",
@@ -359,12 +362,14 @@ impl Identity {
         Ok(())
     }
 
-    /// A named, long-lived bearer token with the person's own authority; shown once.
+    /// A named, long-lived bearer token with the person's own authority; shown once. It ends
+    /// with the single sign-on policy the calling session came from, as that session does.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn create_token(
         &self,
         actor: &Actor,
         input: &NewToken,
+        caller: &str,
     ) -> Result<String, IdentityError> {
         let name = input.name.trim();
         if name.is_empty()
@@ -380,15 +385,17 @@ impl Identity {
         let token = passwords::token();
         let id = sqlx::query_scalar!(
             r#"
-            INSERT INTO human_sessions (token_hash, account_id, expires_at, name)
-            SELECT $1, id, clock_timestamp() + make_interval(days => $3), $4
-            FROM human_accounts WHERE id = $2 AND active
+            INSERT INTO human_sessions (token_hash, account_id, expires_at, name, oidc_policy_revision)
+            SELECT $1, a.id, clock_timestamp() + make_interval(days => $3), $4, s.oidc_policy_revision
+            FROM human_accounts a JOIN human_sessions s ON s.account_id = a.id AND s.token_hash = $5
+            WHERE a.id = $2 AND a.active
             RETURNING id
             "#,
             digest(&token),
             actor.id,
             input.days,
             name,
+            digest(caller),
         )
         .fetch_optional(&self.pool)
         .await?
@@ -445,6 +452,7 @@ impl Identity {
             r#"
             SELECT a.login FROM password_resets r JOIN human_accounts a ON a.id = r.account_id AND a.active
             WHERE r.token_hash = $1 AND r.used_at IS NULL AND r.expires_at > clock_timestamp()
+              AND reset_still_authorized(r.account_id, r.created_by)
             "#,
             digest(token),
         )
@@ -455,7 +463,7 @@ impl Identity {
         let verifier = passwords::hash(password).await?;
         let mut transaction = self.pool.begin().await?;
         let account = sqlx::query_scalar!(
-            "UPDATE password_resets SET used_at = clock_timestamp() WHERE token_hash = $1 AND used_at IS NULL AND expires_at > clock_timestamp() RETURNING account_id",
+            "UPDATE password_resets SET used_at = clock_timestamp() WHERE token_hash = $1 AND used_at IS NULL AND expires_at > clock_timestamp() AND reset_still_authorized(account_id, created_by) RETURNING account_id",
             digest(token),
         )
         .fetch_optional(&mut *transaction)

@@ -3,7 +3,7 @@ use crate::{
     agents::AgentId,
     connections::{
         AgentConnection, Catalog, ConnectError, ConnectionActivity, ConnectionSummary, Connections,
-        FinishSignIn, SaveConnection, SignInStarted, StartSignIn, UpdateConnection,
+        FinishSignIn, ProviderAccess, SaveConnection, SignInStarted, StartSignIn, UpdateConnection,
     },
     identity::{
         Actor, Identity, IdentityError,
@@ -179,6 +179,10 @@ async fn update(
     let actor = editor(&api, &headers, id).await?;
     let current = api.connections.connection_summary(id).await?;
     if let (true, Some(access)) = (current.personal, &input.access) {
+        // Only its owner hands a personal connection to agents; anyone else only withdraws it.
+        if actor.id != current.owner && !withdraws(&current.access.0, access) {
+            return Err(IdentityError::Forbidden.into());
+        }
         api.connections
             .personal_access(current.owner, access)
             .await?;
@@ -186,6 +190,16 @@ async fn update(
     let connection = api.connections.update_connection(id, input).await?;
     audit(&api, &actor, "connection.update", &connection).await;
     Ok(Json(connection))
+}
+
+fn withdraws(current: &ProviderAccess, next: &ProviderAccess) -> bool {
+    match (current, next) {
+        (
+            ProviderAccess::ExplicitGrants { agents: now },
+            ProviderAccess::ExplicitGrants { agents },
+        ) => agents.iter().all(|agent| now.contains(agent)),
+        _ => false,
+    }
 }
 
 /// Forgets the connection and asks the vendor to revoke an OAuth sign-in.
@@ -232,7 +246,11 @@ async fn start(
     headers: HeaderMap,
     Json(input): Json<StartSignIn>,
 ) -> Result<Response, ConnectError> {
-    let actor = connector(&api, &headers).await?;
+    // Signing a connection in again replaces its account: only those who may edit it may.
+    let actor = match input.connection {
+        Some(id) => editor(&api, &headers, id).await?,
+        None => connector(&api, &headers).await?,
+    };
     let origin = api.identity.browser_origin.as_deref();
     let started = api
         .connections
